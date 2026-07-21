@@ -5,8 +5,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
     <title>ADMINISTRASI KEUANGAN Financial Health Checker</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --bg-app: #f6f9ff;
@@ -155,15 +155,6 @@
             box-shadow: 0 16px 35px rgba(37, 99, 235, .28)
         }
 
-        .eyebrow {
-            font-size: 11px;
-            letter-spacing: .13em;
-            text-transform: uppercase;
-            font-weight: 900;
-            color: var(--blue);
-            margin: 0 0 8px
-        }
-
         .muted {
             color: var(--muted);
             font-size: 12px;
@@ -188,17 +179,6 @@
             overflow: hidden
         }
 
-        .hero:after {
-            content: '';
-            position: absolute;
-            right: -60px;
-            top: -55px;
-            width: 165px;
-            height: 165px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, .18)
-        }
-
         .hero h1 {
             font-size: 26px;
             line-height: 1.07;
@@ -210,21 +190,6 @@
             line-height: 1.45;
             margin: 0;
             opacity: .9
-        }
-
-        .chip {
-            display: inline-flex;
-            border-radius: 999px;
-            padding: 7px 10px;
-            background: #eaf2ff;
-            color: #1d4ed8;
-            font-size: 11px;
-            font-weight: 900
-        }
-
-        .hero .chip {
-            background: rgba(255, 255, 255, .18);
-            color: #fff
         }
 
         .grid {
@@ -297,7 +262,8 @@
             color: white;
             padding: 12px 14px;
             font-weight: 900;
-            box-shadow: 0 8px 20px rgba(37, 99, 235, .25)
+            box-shadow: 0 8px 20px rgba(37, 99, 235, .25);
+            cursor: pointer
         }
 
         .btn.secondary {
@@ -332,7 +298,8 @@
             background: white;
             border-radius: 16px;
             padding: 12px;
-            outline: none
+            outline: none;
+            font-size: 14px
         }
 
         .field input:focus,
@@ -410,51 +377,6 @@
             font-size: 18px
         }
 
-        .toast {
-            position: absolute;
-            top: 54px;
-            left: 18px;
-            right: 18px;
-            z-index: 1001;
-            background: #0f1b33;
-            color: white;
-            border-radius: 18px;
-            padding: 12px 14px;
-            font-size: 12px;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, .24)
-        }
-
-        .photo {
-            width: 48px;
-            height: 48px;
-            border-radius: 16px;
-            object-fit: cover;
-            background: #eef5ff
-        }
-
-        .analysis {
-            font-size: 12px;
-            line-height: 1.55;
-            color: var(--muted)
-        }
-
-        .analysis b {
-            color: var(--text)
-        }
-
-        .progress {
-            height: 10px;
-            background: #e2e8f0;
-            border-radius: 999px;
-            overflow: hidden
-        }
-
-        .bar {
-            height: 100%;
-            background: linear-gradient(90deg, var(--blue), var(--green));
-            border-radius: 999px
-        }
-
         .header-with-logout {
             display: flex;
             justify-content: space-between;
@@ -468,11 +390,11 @@
             padding: 8px 12px;
             border-radius: 12px;
             font-size: 11px;
-            font-weight: 900;
+            font-weight: 900
         }
 
         .logout-btn:hover {
-            background: #fecaca;
+            background: #fecaca
         }
 
         .read-only-badge {
@@ -483,7 +405,7 @@
             font-size: 11px;
             font-weight: 900;
             display: inline-block;
-            margin-bottom: 10px;
+            margin-bottom: 10px
         }
 
         @media(max-width:500px) {
@@ -503,8 +425,7 @@
                 height: 100dvh !important;
                 aspect-ratio: unset !important;
                 border-radius: 0 !important;
-                box-shadow: none !important;
-                padding-top: env(safe-area-inset-top, 0)
+                box-shadow: none !important
             }
 
             .app-notch,
@@ -536,31 +457,40 @@
         </div>
     </div>
     <script>
-const DB_KEY = 'administrasi_keuangan_sqlite_v1';
-let SQL, db, session = null, active = location.hash.replace('#/', '') || 'dashboard', users = [], businesses = [], transactions = [], healthScores = [], mentorNotes = [], categories = [];
+const DB_KEY = 'administrasi_keuangan_v3';
+let SQL, db, session = null, active = 'login', users = [], transactions = [], categories = [];
 
-// ==================== INISIALISASI DATABASE ====================
 async function initDB() {
-    SQL = window.SQL;
-    const savedData = localStorage.getItem(DB_KEY);
-    db = new SQL.Database(savedData ? new Uint8Array(JSON.parse(savedData)) : undefined);
-
-    if (!savedData) initSchema();
+    return new Promise(async resolve => {
+        const script = document.createElement('script');
+        script.src = 'https://sql.js.org/dist/sql-wasm.js';
+        script.onload = async () => {
+            const SQL = window.SQL;
+            const dbPath = 'https://sql.js.org/dist/sql-wasm.wasm';
+            SQL.Database.create({wasmBinary: null}).then(sqlJs => {
+                SQL = sqlJs;
+                let savedData = localStorage.getItem(DB_KEY);
+                if (savedData) {
+                    db = new SQL.Database(new Uint8Array(JSON.parse(savedData)));
+                } else {
+                    db = new SQL.Database();
+                    initSchema();
+                }
+                loadData();
+                render();
+                renderNav();
+                resolve();
+            });
+        };
+        document.head.appendChild(script);
+    });
 }
 
 function initSchema() {
-    const queries = [
-        `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, email TEXT UNIQUE, password TEXT, role TEXT, region TEXT)`,
-        `CREATE TABLE IF NOT EXISTS businesses (id INTEGER PRIMARY KEY, owner_id INTEGER, name TEXT, monthly_target REAL, initial_score REAL, status TEXT, mentor_id INTEGER)`,
-        `CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY, business_id INTEGER, type TEXT, category_id INTEGER, amount REAL, description TEXT, transaction_date TEXT, receipt_base64 TEXT, created_by INTEGER, created_at TEXT)`,
-        `CREATE TABLE IF NOT EXISTS health_scores (id INTEGER PRIMARY KEY, business_id INTEGER, score REAL, status TEXT, recommendation TEXT, created_at TEXT)`,
-        `CREATE TABLE IF NOT EXISTS mentor_notes (id INTEGER PRIMARY KEY, business_id INTEGER, mentor_id INTEGER, note TEXT, created_at TEXT)`,
-        `CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY, name TEXT, type TEXT)`
-    ];
+    db.run('CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT UNIQUE, password TEXT, role TEXT, region TEXT)');
+    db.run('CREATE TABLE transactions (id INTEGER PRIMARY KEY, type TEXT, amount REAL, description TEXT, category TEXT, transaction_date TEXT, created_by INTEGER, created_at TEXT)');
+    db.run('CREATE TABLE categories (id INTEGER PRIMARY KEY, name TEXT, type TEXT)');
 
-    queries.forEach(q => db.run(q));
-
-    // Insert demo data - SEMUA AKUN TETAP
     const demoUsers = [
         ['admin@umkmcoach.id', 'admin123', 'Admin', 'admin', 'Jakarta'],
         ['umkm@umkmcoach.id', 'pt123', 'PT Owner', 'owner', 'Surabaya'],
@@ -570,10 +500,10 @@ function initSchema() {
     ];
 
     demoUsers.forEach(u => {
-        db.run(`INSERT INTO users (email, password, name, role, region) VALUES (?, ?, ?, ?, ?)`, u);
+        db.run('INSERT INTO users (email, password, name, role, region) VALUES (?, ?, ?, ?, ?)', u);
     });
 
-    const categories_data = [
+    const catData = [
         ['Penjualan', 'income'],
         ['Jasa', 'income'],
         ['Lainnya', 'income'],
@@ -584,8 +514,8 @@ function initSchema() {
         ['Transport', 'expense']
     ];
 
-    categories_data.forEach(c => {
-        db.run(`INSERT INTO categories (name, type) VALUES (?, ?)`, c);
+    catData.forEach(c => {
+        db.run('INSERT INTO categories (name, type) VALUES (?, ?)', c);
     });
 
     saveDB();
@@ -593,11 +523,9 @@ function initSchema() {
 
 function saveDB() {
     const data = db.export();
-    const arr = Array.from(data);
-    localStorage.setItem(DB_KEY, JSON.stringify(arr));
+    localStorage.setItem(DB_KEY, JSON.stringify(Array.from(data)));
 }
 
-// ==================== UTILITY FUNCTIONS ====================
 function show(screen) {
     active = screen;
     location.hash = '#/' + screen;
@@ -605,13 +533,18 @@ function show(screen) {
 }
 
 function login(email, password) {
-    const result = db.exec(`SELECT * FROM users WHERE email = ? AND password = ?`, [email, password]);
-    if (result.length > 0) {
-        session = { id: result[0][0], name: result[0][1], email: result[0][2], role: result[0][4], region: result[0][5] };
-        localStorage.setItem('session', JSON.stringify(session));
-        show('dashboard');
-    } else {
-        alert('Email atau password salah');
+    try {
+        const result = db.exec('SELECT * FROM users WHERE email = ? AND password = ?', [email, password]);
+        if (result.length > 0 && result[0].length > 0) {
+            const user = result[0][0];
+            session = {id: user[0], name: user[1], email: user[2], role: user[4], region: user[5]};
+            localStorage.setItem('session', JSON.stringify(session));
+            show('dashboard');
+        } else {
+            alert('Email atau password salah');
+        }
+    } catch (e) {
+        alert('Error login: ' + e.message);
     }
 }
 
@@ -624,45 +557,36 @@ function logout() {
 }
 
 function getStatusBadge(score) {
-    if (score >= 80) return { text: 'Sangat Sehat', class: 'good' };
-    if (score >= 60) return { text: 'Sehat', class: 'good' };
-    if (score >= 40) return { text: 'Cukup', class: 'warn' };
-    return { text: 'Perlu Perbaikan', class: 'bad' };
+    if (score >= 80) return {text: 'Sangat Sehat', class: 'good'};
+    if (score >= 60) return {text: 'Sehat', class: 'good'};
+    if (score >= 40) return {text: 'Cukup', class: 'warn'};
+    return {text: 'Perlu Perbaikan', class: 'bad'};
 }
 
 function getRoleDisplay() {
-    const roleMap = {
-        'admin': 'Administrator',
-        'owner': 'Pemilik PT',
-        'mentor': 'Pendamping PT',
-        'accountant': 'Akuntan',
-        'manager': 'Manajer'
-    };
-    return roleMap[session.role] || session.role;
+    const map = {'admin': 'Administrator', 'owner': 'Pemilik PT', 'mentor': 'Pendamping PT', 'accountant': 'Akuntan', 'manager': 'Manajer'};
+    return map[session.role] || session.role;
 }
 
-// ==================== LOAD DATA ====================
 function loadData() {
     const sessData = localStorage.getItem('session');
     if (sessData) session = JSON.parse(sessData);
     else if (active !== 'login') show('login');
 
-    const usersRes = db.exec(`SELECT * FROM users`);
-    users = usersRes.length > 0 ? usersRes[0] : [];
-
-    const bizRes = db.exec(`SELECT * FROM businesses`);
-    businesses = bizRes.length > 0 ? bizRes[0] : [];
-
-    const transRes = db.exec(`SELECT * FROM transactions`);
-    transactions = transRes.length > 0 ? transRes[0] : [];
-
-    const catRes = db.exec(`SELECT * FROM categories`);
-    categories = catRes.length > 0 ? catRes[0] : [];
+    try {
+        const transRes = db.exec('SELECT * FROM transactions');
+        transactions = transRes.length > 0 ? transRes[0] : [];
+        
+        const catRes = db.exec('SELECT * FROM categories');
+        categories = catRes.length > 0 ? catRes[0] : [];
+    } catch (e) {
+        console.log('Load data error:', e);
+    }
 }
 
-// ==================== RENDERING ====================
 function render() {
     const body = document.getElementById('body');
+    if (!body) return;
     body.innerHTML = '';
 
     if (!session && active !== 'login') {
@@ -670,7 +594,7 @@ function render() {
         return;
     }
 
-    const screenMap = {
+    const screens = {
         login: screenLogin,
         dashboard: screenDashboard,
         transactions: screenTransactions,
@@ -678,7 +602,7 @@ function render() {
         profile: screenProfile
     };
 
-    const screen = screenMap[active] || screenLogin;
+    const screen = screens[active] || screenLogin;
     body.appendChild(screen());
 }
 
@@ -717,7 +641,8 @@ function screenLogin() {
 function handleLogin() {
     const email = document.getElementById('emailInput').value;
     const password = document.getElementById('passwordInput').value;
-    login(email, password);
+    if (email && password) login(email, password);
+    else alert('Email dan password harus diisi');
 }
 
 function screenDashboard() {
@@ -735,16 +660,15 @@ function screenDashboard() {
     `;
     div.appendChild(header);
 
-    // Badge untuk Pemilik PT (Read-Only)
     if (session.role === 'owner') {
         div.innerHTML += `
             <div class="read-only-badge">📊 Mode Monitoring (Read-Only)</div>
-            <p class="muted">Anda hanya bisa memantau keuangan. Untuk menginput transaksi, hubungi Akuntan.</p>
+            <p class="muted">Anda hanya bisa memantau. Hubungi Akuntan untuk input transaksi.</p>
         `;
     }
 
-    const heroScore = 75;
-    const scoreStatus = getStatusBadge(heroScore);
+    const score = 75;
+    const badge = getStatusBadge(score);
     
     div.innerHTML += `
         <div class="hero">
@@ -756,8 +680,8 @@ function screenDashboard() {
         <div class="grid" style="margin-top: 16px;">
             <div class="card">
                 <div class="label">Score</div>
-                <div class="value">${heroScore}</div>
-                <span class="status ${scoreStatus.class}">${scoreStatus.text}</span>
+                <div class="value">${score}</div>
+                <span class="status ${badge.class}">${badge.text}</span>
             </div>
             <div class="card">
                 <div class="label">Target Bulanan</div>
@@ -766,26 +690,22 @@ function screenDashboard() {
         </div>
     `;
 
-    // Transaksi terbaru
-    const recentTransactions = transactions.slice(-3).reverse();
-    if (recentTransactions.length > 0) {
+    if (transactions.length > 0) {
         div.innerHTML += `<div class="section-title"><h2>Transaksi Terbaru</h2></div>`;
-        recentTransactions.forEach(t => {
-            const type = t[2] === 'income' ? 'Masuk' : 'Keluar';
-            const typeClass = t[2] === 'income' ? 'income' : 'expense';
+        transactions.slice(-3).reverse().forEach(t => {
+            const typeClass = t[1] === 'income' ? 'income' : 'expense';
             div.innerHTML += `
                 <div class="row">
                     <div>
-                        <strong>${t[5]}</strong>
-                        <br><span class="muted">${t[6]}</span>
+                        <strong>${t[3]}</strong>
+                        <br><span class="muted">${t[4]}</span>
                     </div>
-                    <span class="${typeClass}">Rp${t[4].toLocaleString()}</span>
+                    <span class="${typeClass}">Rp${t[2].toLocaleString()}</span>
                 </div>
             `;
         });
     }
 
-    // Tombol navigasi berdasarkan role
     if (session.role === 'accountant') {
         div.innerHTML += `
             <div style="margin-top: 20px;">
@@ -803,26 +723,25 @@ function screenTransactions() {
     const div = document.createElement('div');
     div.className = 'screen';
 
-    const header = document.createElement('div');
-    header.className = 'header-with-logout';
-    header.innerHTML = `
-        <h2 style="margin: 0; font-size: 20px;">Riwayat Transaksi</h2>
-        <button class="logout-btn" onclick="logout()">🚪 Logout</button>
+    div.innerHTML = `
+        <div class="header-with-logout">
+            <h2 style="margin: 0; font-size: 20px;">Riwayat Transaksi</h2>
+            <button class="logout-btn" onclick="logout()">🚪 Logout</button>
+        </div>
     `;
-    div.appendChild(header);
 
     if (transactions.length === 0) {
         div.innerHTML += `<p class="muted">Belum ada transaksi</p>`;
     } else {
         transactions.forEach(t => {
-            const typeClass = t[2] === 'income' ? 'income' : 'expense';
+            const typeClass = t[1] === 'income' ? 'income' : 'expense';
             div.innerHTML += `
                 <div class="row">
                     <div>
-                        <strong>${t[5]}</strong>
-                        <br><span class="muted">${t[6]}</span>
+                        <strong>${t[3]}</strong>
+                        <br><span class="muted">${t[4]}</span>
                     </div>
-                    <span class="${typeClass}">Rp${t[4].toLocaleString()}</span>
+                    <span class="${typeClass}">Rp${t[2].toLocaleString()}</span>
                 </div>
             `;
         });
@@ -846,7 +765,7 @@ function screenAddTransaction() {
     div.className = 'screen';
 
     if (session.role !== 'accountant') {
-        div.innerHTML = `<p class="muted">Anda tidak memiliki akses untuk menambah transaksi</p>`;
+        div.innerHTML = `<p class="muted">Anda tidak memiliki akses</p>`;
         return div;
     }
 
@@ -864,13 +783,13 @@ function screenAddTransaction() {
         <div class="field">
             <label>Kategori</label>
             <select id="categorySelect">
-                ${categories.map(c => `<option value="${c[0]}">${c[1]}</option>`).join('')}
+                ${categories.map(c => `<option value="${c[1]}">${c[1]}</option>`).join('')}
             </select>
         </div>
         
         <div class="field">
             <label>Jumlah (Rp)</label>
-            <input type="number" id="amountInput" placeholder="0">
+            <input type="number" id="amountInput" placeholder="0" min="0">
         </div>
         
         <div class="field">
@@ -886,43 +805,44 @@ function screenAddTransaction() {
 
 function handleAddTransaction() {
     if (session.role !== 'accountant') {
-        alert('Anda tidak memiliki akses');
+        alert('Akses ditolak');
         return;
     }
 
     const type = document.getElementById('typeSelect').value;
-    const category = document.getElementById('categorySelect').value;
+    const cat = document.getElementById('categorySelect').value;
     const amount = parseFloat(document.getElementById('amountInput').value);
     const desc = document.getElementById('descInput').value;
 
     if (!amount || amount <= 0) {
-        alert('Jumlah harus lebih dari 0');
+        alert('Jumlah harus > 0');
         return;
     }
 
-    db.run(
-        `INSERT INTO transactions (business_id, type, category_id, amount, description, transaction_date, created_by, created_at) VALUES (1, ?, ?, ?, ?, ?, ?, ?)`,
-        [type, 1, amount, desc, new Date().toLocaleDateString('id-ID'), session.id, new Date().toISOString()]
-    );
-    saveDB();
-    alert('Transaksi berhasil ditambahkan');
-    loadData();
-    show('transactions');
+    try {
+        db.run(
+            'INSERT INTO transactions (type, amount, description, category, transaction_date, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [type, amount, desc, cat, new Date().toLocaleDateString('id-ID'), session.id, new Date().toISOString()]
+        );
+        saveDB();
+        alert('Transaksi berhasil ditambahkan');
+        loadData();
+        show('transactions');
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
 }
 
 function screenProfile() {
     const div = document.createElement('div');
     div.className = 'screen';
 
-    const header = document.createElement('div');
-    header.className = 'header-with-logout';
-    header.innerHTML = `
-        <h2 style="margin: 0; font-size: 20px;">Profil</h2>
-        <button class="logout-btn" onclick="logout()">🚪 Logout</button>
-    `;
-    div.appendChild(header);
-
-    div.innerHTML += `
+    div.innerHTML = `
+        <div class="header-with-logout">
+            <h2 style="margin: 0; font-size: 20px;">Profil</h2>
+            <button class="logout-btn" onclick="logout()">🚪 Logout</button>
+        </div>
+        
         <div class="card">
             <div class="avatar" style="width: 60px; height: 60px; font-size: 28px; margin-bottom: 12px;">
                 ${session.name.charAt(0).toUpperCase()}
@@ -947,23 +867,26 @@ function screenProfile() {
     return div;
 }
 
-// ==================== NAVIGATION ====================
 function renderNav() {
-    const body = document.getElementById('body').parentElement;
-    if (body.querySelector('.nav')) body.querySelector('.nav').remove();
+    const body = document.getElementById('body');
+    if (!body || !body.parentElement) return;
+    
+    const container = body.parentElement;
+    const oldNav = container.querySelector('.nav');
+    if (oldNav) oldNav.remove();
 
     if (!session) return;
 
     const nav = document.createElement('nav');
     nav.className = 'nav';
 
-    const navItems = [
-        { name: 'Dashboard', icon: '📊', screen: 'dashboard' },
-        { name: 'Transaksi', icon: '📝', screen: 'transactions' },
-        { name: 'Profil', icon: '👤', screen: 'profile' }
+    const items = [
+        {name: 'Dashboard', icon: '📊', screen: 'dashboard'},
+        {name: 'Transaksi', icon: '📝', screen: 'transactions'},
+        {name: 'Profil', icon: '👤', screen: 'profile'}
     ];
 
-    navItems.forEach(item => {
+    items.forEach(item => {
         const btn = document.createElement('button');
         btn.className = active === item.screen ? 'active' : '';
         btn.onclick = () => show(item.screen);
@@ -971,21 +894,23 @@ function renderNav() {
         nav.appendChild(btn);
     });
 
-    body.appendChild(nav);
+    container.appendChild(nav);
 }
 
-// ==================== MAIN ====================
 document.addEventListener('DOMContentLoaded', async () => {
-    await initDB();
-    loadData();
+    const clock = document.getElementById('clock');
+    if (clock) {
+        clock.textContent = new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'});
+        setInterval(() => {
+            clock.textContent = new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'});
+        }, 1000);
+    }
 
-    document.getElementById('clock').textContent = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-    setInterval(() => {
-        document.getElementById('clock').textContent = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-    }, 1000);
-
-    render();
-    renderNav();
+    try {
+        await initDB();
+    } catch (e) {
+        console.error('Init error:', e);
+    }
 
     window.addEventListener('hashchange', () => {
         active = location.hash.replace('#/', '') || 'dashboard';
