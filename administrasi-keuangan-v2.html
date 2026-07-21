@@ -560,7 +560,7 @@ function initSchema() {
 
     queries.forEach(q => db.run(q));
 
-    // Insert demo data
+    // Insert demo data - SEMUA AKUN TETAP
     const demoUsers = [
         ['admin@umkmcoach.id', 'admin123', 'Admin', 'admin', 'Jakarta'],
         ['umkm@umkmcoach.id', 'pt123', 'PT Owner', 'owner', 'Surabaya'],
@@ -630,6 +630,17 @@ function getStatusBadge(score) {
     return { text: 'Perlu Perbaikan', class: 'bad' };
 }
 
+function getRoleDisplay() {
+    const roleMap = {
+        'admin': 'Administrator',
+        'owner': 'Pemilik PT',
+        'mentor': 'Pendamping PT',
+        'accountant': 'Akuntan',
+        'manager': 'Manajer'
+    };
+    return roleMap[session.role] || session.role;
+}
+
 // ==================== LOAD DATA ====================
 function loadData() {
     const sessData = localStorage.getItem('session');
@@ -692,10 +703,12 @@ function screenLogin() {
         <button class="btn" onclick="handleLogin()">Login</button>
         
         <div style="background: #eaf2ff; padding: 12px; border-radius: 12px; font-size: 12px;">
-            <p style="margin: 0 0 8px; font-weight: 900; color: #2563eb;">Demo Accounts:</p>
+            <p style="margin: 0 0 8px; font-weight: 900; color: #2563eb;">🔐 Demo Accounts:</p>
+            <p style="margin: 0 0 4px;"><strong>Admin:</strong> admin@umkmcoach.id / admin123</p>
             <p style="margin: 0 0 4px;"><strong>Owner:</strong> umkm@umkmcoach.id / pt123</p>
+            <p style="margin: 0 0 4px;"><strong>Pendamping:</strong> pendamping@umkmcoach.id / damping123</p>
             <p style="margin: 0 0 4px;"><strong>Akuntan:</strong> akuntan@umkmcoach.id / akuntan123</p>
-            <p style="margin: 0;"><strong>Mentor:</strong> pendamping@umkmcoach.id / damping123</p>
+            <p style="margin: 0;"><strong>Manajer:</strong> manajer@umkmcoach.id / manajer123</p>
         </div>
     `;
     return div;
@@ -716,12 +729,13 @@ function screenDashboard() {
     header.innerHTML = `
         <div>
             <h2 style="margin: 0; font-size: 20px;">Dashboard</h2>
-            <p class="muted" style="margin: 4px 0 0;">Halo, ${session.name}</p>
+            <p class="muted" style="margin: 4px 0 0;">${getRoleDisplay()}</p>
         </div>
         <button class="logout-btn" onclick="logout()">🚪 Logout</button>
     `;
     div.appendChild(header);
 
+    // Badge untuk Pemilik PT (Read-Only)
     if (session.role === 'owner') {
         div.innerHTML += `
             <div class="read-only-badge">📊 Mode Monitoring (Read-Only)</div>
@@ -918,7 +932,12 @@ function screenProfile() {
             
             <div class="row" style="margin-top: 14px;">
                 <span>Role:</span>
-                <strong>${session.role === 'owner' ? 'Pemilik PT' : session.role === 'accountant' ? 'Akuntan' : session.role === 'mentor' ? 'Pendamping' : session.role}</strong>
+                <strong>${getRoleDisplay()}</strong>
+            </div>
+
+            <div class="row">
+                <span>Wilayah:</span>
+                <strong>${session.region}</strong>
             </div>
             
             <button class="btn danger" onclick="logout()" style="width: 100%; margin-top: 14px;">🚪 Logout</button>
