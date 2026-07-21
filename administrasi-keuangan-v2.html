@@ -503,7 +503,160 @@
             <main class="app-body" id="body"></main>
         </div>
     </div>
-    <script>const DB_KEY = 'administrasi_keuangan_sqlite_v1'; let SQL, db, session = null, active = location.hash.replace('#/', '') || 'dashboard', users = [], businesses = [], transactions = [], scores = [], notes = [], categories = [], receiptBase64 = '', chart = null; const $ = s => document.querySelector(s), rupiah = n => 'Rp' + Number(n || 0).toLocaleString('id-ID'), esc = s => String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m])); function toast(m) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = m; document.querySelector('.app-container').appendChild(t); setTimeout(() => t.remove(), 3300) } function clock() { document.getElementById('clock').textContent = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) } setInterval(clock, 1000); clock(); async function loadBytes() { return await new Promise(res => { try { const o = indexedDB.open(DB_KEY, 1); o.onupgradeneeded = () => o.result.createObjectStore('files'); o.onsuccess = () => { const r = o.result.transaction('files', 'readonly').objectStore('files').get('main'); r.onsuccess = () => res(r.result || null); r.onerror = () => res(null) }; o.onerror = () => res(localStorage.getItem(DB_KEY) ? Uint8Array.from(atob(localStorage.getItem(DB_KEY)), c => c.charCodeAt(0)) : null) } catch (e) { res(null) } }) } async function persist() { const data = db.export(); try { await new Promise((res, rej) => { const o = indexedDB.open(DB_KEY, 1); o.onupgradeneeded = () => o.result.createObjectStore('files'); o.onsuccess = () => { const tx = o.result.transaction('files', 'readwrite'); tx.objectStore('files').put(data, 'main'); tx.oncomplete = res; tx.onerror = rej }; o.onerror = rej }) } catch (e) { localStorage.setItem(DB_KEY, btoa(String.fromCharCode(...data))) } } function schema() { db.run(`PRAGMA foreign_keys=ON;CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,email TEXT UNIQUE,password TEXT,role TEXT CHECK(role IN ('admin','owner','mentor','accountant','manager')),region TEXT,active INTEGER DEFAULT 1);CREATE TABLE IF NOT EXISTS businesses(id INTEGER PRIMARY KEY AUTOINCREMENT,owner_id INTEGER,name TEXT,monthly_target INTEGER,initial_score INTEGER,status TEXT,mentor_id INTEGER,FOREIGN KEY(owner_id) REFERENCES users(id),FOREIGN KEY(mentor_id) REFERENCES users(id));CREATE TABLE IF NOT EXISTS categories(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,type TEXT CHECK(type IN ('income','expense')));CREATE TABLE IF NOT EXISTS score_parameters(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,weight INTEGER,enabled INTEGER DEFAULT 1);CREATE TABLE IF NOT EXISTS transactions(id INTEGER PRIMARY KEY AUTOINCREMENT,business_id INTEGER,type TEXT CHECK(type IN ('income','expense')),category_id INTEGER,amount INTEGER,description TEXT,transaction_date TEXT,receipt_base64 TEXT,created_by INTEGER,created_at TEXT DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(business_id) REFERENCES businesses(id),FOREIGN KEY(category_id) REFERENCES categories(id));CREATE TABLE IF NOT EXISTS health_scores(id INTEGER PRIMARY KEY AUTOINCREMENT,business_id INTEGER,score INTEGER,status TEXT,recommendation TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(business_id) REFERENCES businesses(id));CREATE TABLE IF NOT EXISTS mentor_notes(id INTEGER PRIMARY KEY AUTOINCREMENT,business_id INTEGER,mentor_id INTEGER,note TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TRIGGER IF NOT EXISTS trg_transaction_score AFTER INSERT ON transactions BEGIN INSERT INTO health_scores(business_id,score,status,recommendation) SELECT NEW.business_id,MAX(0,MIN(100,50 + CAST(((SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE -amount END),0) FROM transactions WHERE business_id=NEW.business_id)*30.0 / NULLIF((SELECT monthly_target FROM businesses WHERE id=NEW.business_id),0)) AS INTEGER) + CASE WHEN (SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE 0 END),0) FROM transactions WHERE business_id=NEW.business_id) >= (SELECT monthly_target FROM businesses WHERE id=NEW.business_id) THEN 20 ELSE 0 END)),CASE WHEN (SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE -amount END),0) FROM transactions WHERE business_id=NEW.business_id) < 0 THEN 'Perlu Perhatian' WHEN (SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE 0 END),0) FROM transactions WHERE business_id=NEW.business_id) >= (SELECT monthly_target FROM businesses WHERE id=NEW.business_id) THEN 'Sehat' ELSE 'Usaha Berkembang' END,CASE WHEN (SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE -amount END),0) FROM transactions WHERE business_id=NEW.business_id) < 0 THEN 'Pengeluaran lebih besar daripada pemasukan. Kurangi biaya dan evaluasi stok lambat terjual.' WHEN (SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE 0 END),0) FROM transactions WHERE business_id=NEW.business_id) >= (SELECT monthly_target FROM businesses WHERE id=NEW.business_id) THEN 'Target omzet tercapai. Pertimbangkan menambah modal karena arus kas stabil.' ELSE 'Tingkatkan penjualan agar target omzet tercapai dan jaga pengeluaran tetap efisien.' END;END;`) } function seed() { if ((db.exec('SELECT COUNT(*) FROM users')[0]?.values[0][0] || 0) > 0) return; db.run(`INSERT INTO users(name,email,password,role,region) VALUES ('Adafi aprianto abiyyu','admin@umkmcoach.id','admin123','admin','Nasional'),('Igri maulana','umkm@umkmcoach.id','pt123','owner','Kecamatan Contoh'),('Budi Santoso','pendamping@umkmcoach.id','damping123','mentor','Kecamatan Contoh'),('Rina Kartika','akuntan@umkmcoach.id','akuntan123','accountant','Kantor Keuangan'),('Dimas Saputra','manajer@umkmcoach.id','manajer123','manager','Divisi Operasional');INSERT INTO businesses(owner_id,name,monthly_target,initial_score,status,mentor_id) VALUES (2,'PT. Maju Jaya',30000000,78,'Usaha Berkembang',3);INSERT INTO categories(name,type) VALUES ('Penjualan Harian','income'),('Pembelian Stok','expense'),('Operasional','expense'),('Modal Tambahan','income'),('Promosi','expense');INSERT INTO score_parameters(name,weight,enabled) VALUES ('Cash Flow Positif',40,1),('Pencapaian Target Omzet',35,1),('Rasio Pengeluaran',25,1);INSERT INTO transactions(business_id,type,category_id,amount,description,transaction_date,created_by) VALUES (1,'income',1,9500000,'Penjualan minggu pertama',date('now','-20 days'),2),(1,'expense',2,4200000,'Belanja stok sembako',date('now','-18 days'),2),(1,'income',1,8700000,'Penjualan minggu kedua',date('now','-12 days'),2),(1,'expense',3,1800000,'Listrik, transport, dan kemasan',date('now','-10 days'),2),(1,'income',1,7200000,'Penjualan minggu ketiga',date('now','-5 days'),2);INSERT INTO health_scores(business_id,score,status,recommendation) VALUES (1,78,'Usaha Berkembang','Arus kas cukup stabil. Tingkatkan penjualan agar target omzet tercapai.');INSERT INTO mentor_notes(business_id,mentor_id,note) VALUES (1,3,'Pisahkan catatan pembelian stok cepat laku dan lambat laku agar keputusan belanja lebih akurat.');`) } function all(q) { const r = db.exec(q)[0]; return r ? r.values.map(v => Object.fromEntries(r.columns.map((c, i) => [c, v[i]]))) : [] } function refresh() { users = all('SELECT * FROM users ORDER BY id'); businesses = all('SELECT * FROM businesses ORDER BY id'); categories = all('SELECT * FROM categories ORDER BY type,name'); transactions = all('SELECT t.*,c.name category FROM transactions t LEFT JOIN categories c ON c.id=t.category_id ORDER BY transaction_date DESC,id DESC'); scores = all('SELECT * FROM health_scores ORDER BY id DESC'); notes = all('SELECT * FROM mentor_notes ORDER BY id DESC') } function roleLabel(r) { return { admin: 'Administrator', owner: 'Pemilik PT', mentor: 'Pendamping PT', accountant: 'Akuntan', manager: 'Manajer' }[r] || r } function can(p) { const r = session?.role, m = { admin: ['view_all', 'manage_master', 'backup'], owner: ['create_transaction', 'upload_receipt', 'set_target', 'view_own', 'backup'], mentor: ['view_assisted', 'create_note', 'backup'], accountant: ['view_assisted', 'manage_categories', 'backup'], manager: ['view_assisted', 'manage_structure', 'monitor_staff', 'backup'] }; return (m[r] || []).includes(p) } function biz() { if (session?.role === 'owner') return businesses.find(b => b.owner_id == session.id) || businesses[0]; return businesses[0] } function visibleTransactions() { return can('view_all') || can('view_assisted') ? transactions : transactions.filter(t => t.business_id == biz().id) } function metrics() { const b = biz() || {}, tx = visibleTransactions().filter(t => t.business_id == b.id), inc = tx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0), exp = tx.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0), cash = inc - exp, progress = b.monthly_target ? Math.min(100, Math.round(inc / b.monthly_target * 100)) : 0, last = scores.find(s => s.business_id == b.id) || { score: b.initial_score || 0, status: b.status || '-', recommendation: 'Mulai catat transaksi agar rekomendasi lebih akurat.' }; return { b, tx, inc, exp, cash, progress, last } } async function exec(sql, p = []) { db.run(sql, p); refresh(); await persist(); render() } function nav() { return `<nav class="nav">${[['dashboard', '◌', 'Dashboard'], ['transaksi', '＋', 'Transaksi'], ['riwayat', '▤', 'Riwayat'], ['profil', '◉', 'Profil']].map(x => `<button class="${active == x[0] ? 'active' : ''}" onclick="go('${x[0]}')"><span class="icon">${x[1]}</span>${x[2]}</button>`).join('')}</nav>` } function render() { if (!session) { document.getElementById('body').innerHTML = `<section class="login"><div class="brand">₨</div><div><p class="eyebrow">Administrasi Keuangan PT</p><h1 style="font-size:32px;line-height:1.02;margin:8px 0">ADMINISTRASI KEUANGAN</h1><p class="muted" style="font-size:14px">Penasihat keuangan saku untuk PT: catat pemasukan, pantau cash flow, dan kejar target omzet.</p></div><div class="card"><div class="field"><label>Email</label><select id="email">${users.map(u => `<option value="${u.email}">${esc(u.name)} — ${roleLabel(u.role)}</option>`).join('')}</select></div><div class="field"><label>Password</label><input id="password" type="password" value="admin123"></div><button class="btn" onclick="login()">Masuk Aplikasi</button><p class="muted">Demo: admin@umkmcoach.id / admin123 • umkm@umkmcoach.id / pt123 • pendamping@umkmcoach.id / damping123</p></div></section>`; return } const me = users.find(u => u.id == session.id) || session, m = metrics(); let html = `<section class="screen"><div class="top-row"><div><p class="eyebrow">${roleLabel(session.role)}</p><h2 style="margin:4px 0 0">Halo, ${esc(me.name)}</h2></div><div class="avatar">${esc(me.name[0])}</div></div>`; if (active === 'dashboard') html += `<div class="hero"><span class="chip">Local-First • SQLite WASM</span><h1>${esc(m.b.name || 'PT Binaan')}</h1><p>Skor kesehatan keuangan saat ini ${m.last.score}/100 — ${esc(m.last.status)}.</p></div><div class="grid"><div class="card"><div class="label">Financial Score</div><div class="value">${m.last.score}</div><span class="status ${m.last.score >= 75 ? 'good' : m.last.score >= 55 ? 'warn' : 'bad'}">${esc(m.last.status)}</span></div><div class="card"><div class="label">Cash Flow</div><div class="value ${m.cash >= 0 ? 'income' : 'expense'}">${rupiah(m.cash)}</div></div><div class="card"><div class="label">Pemasukan</div><div class="value income">${rupiah(m.inc)}</div></div><div class="card"><div class="label">Pengeluaran</div><div class="value expense">${rupiah(m.exp)}</div></div></div><div class="card"><div class="section-title" style="margin-top:0"><h2>Target Omzet</h2><b>${m.progress}%</b></div><div class="progress"><div class="bar" style="width:${m.progress}%"></div></div><p class="muted">Target bulanan ${rupiah(m.b.monthly_target)}. ${m.progress >= 100 ? 'Target tercapai, pertimbangkan ekspansi bertahap.' : 'Tingkatkan penjualan agar target omzet tercapai.'}</p></div><div class="card" style="margin-top:12px"><h2 style="font-size:16px;margin:0 0 8px">Rekomendasi</h2><p class="muted" style="font-size:13px;margin:0">${esc(m.last.recommendation)}</p></div><div class="card" style="margin-top:12px;height:220px"><canvas id="chart"></canvas></div>`; if (active === 'transaksi') html += `<div class="section-title"><h2>Tambah Transaksi</h2></div>${can('create_transaction') ? `<div class="card"><div class="field"><label>Jenis</label><select id="type" onchange="renderCategoryOptions()"><option value="income">Pemasukan</option><option value="expense">Pengeluaran</option></select></div><div class="field"><label>Kategori</label><select id="category"></select></div><div class="field"><label>Nominal</label><input id="amount" type="number" value="250000"></div><div class="field"><label>Keterangan</label><input id="desc" value="Transaksi manual"></div><div class="field"><label>Foto Nota</label><input type="file" accept="image/*" onchange="handleReceipt(event)"></div><button class="btn" onclick="addTransaction()">Simpan Transaksi</button><p class="muted">Foto nota dikompresi ke Base64 sebelum disimpan ke SQLite lokal.</p></div>` : `<div class="card muted">Pendamping hanya dapat melihat data dan memberi catatan, tidak dapat mengubah transaksi.</div>`}<div class="section-title"><h2>Riwayat Terbaru</h2></div>${m.tx.slice(0, 6).map(t => `<div class="row"><div><strong>${esc(t.category)}</strong><div class="muted">${esc(t.description)} • ${t.transaction_date}</div></div><b class="${t.type}">${t.type === 'income' ? '+' : '-'}${rupiah(t.amount)}</b></div>`).join('')}`; if (active === 'riwayat') html += `<div class="section-title"><h2>Riwayat Score</h2></div>${scores.filter(s => s.business_id == m.b.id).slice(0, 6).map(s => `<div class="row"><div><strong>Score ${s.score}/100</strong><div class="muted">${esc(s.status)} • ${s.created_at}</div></div><span class="status ${s.score >= 75 ? 'good' : s.score >= 55 ? 'warn' : 'bad'}">${s.score}</span></div>`).join('')}<div class="section-title"><h2>Catatan Pendamping</h2>${can('create_note') ? '<button class="btn" onclick="addNote()">Tambah</button>' : ''}</div>${notes.map(n => `<div class="row"><div><strong>Budi Santoso</strong><div class="muted">${esc(n.note)}</div></div></div>`).join('')}`; if (active === 'profil') html += `<div class="section-title"><h2>Profil & Akses</h2></div><div class="card analysis"><b>Analisis RBAC:</b><br>Admin: mengelola akun, kategori, parameter skor, master data, dan melihat seluruh data.<br>Pemilik PT: profil usaha, nota, transaksi, target omzet, dashboard, rekomendasi, riwayat skor.<br>Pendamping: melihat PT binaan dan memberi catatan tanpa mengubah transaksi.<br>Akuntan: melihat Financial Health Score, riwayat transaksi, dan mengelola kategori transaksi.<br>Manajer: mengatur struktur kerja dan memantau kinerja staf.<br><br><b>SQL Relasional:</b> users → businesses → transactions / health_scores / mentor_notes. categories dan score_parameters menjadi master data.<br><br><b>Logika Bisnis:</b> setiap INSERT transaksi memicu trigger trg_transaction_score untuk menyimpan riwayat Financial Health Score dan rekomendasi terbaru.</div>${can('manage_categories') || can('manage_master') ? `<div class="section-title"><h2>Kelola Kategori</h2></div><div class="card"><div class="field"><label>Nama Kategori</label><input id="catName" value="Biaya Administrasi"></div><div class="field"><label>Jenis</label><select id="catType"><option value="income">Pemasukan</option><option value="expense">Pengeluaran</option></select></div><button class="btn" onclick="addCategory()">Tambah Kategori</button></div>` : ''}${can('manage_structure') ? `<div class="section-title"><h2>Struktur & Staf</h2></div><div class="card analysis"><b>Struktur kerja:</b><br>Direktur → Manajer → Akuntan → Staf Operasional.<br><br><b>Pemantauan staf:</b><br>Transaksi tercatat ${transactions.length} item, kategori aktif ${categories.length}, dan PT binaan dalam status ${esc(m.last.status)}.</div>` : ''}<div class="card" style="margin-top:12px"><h2 style="font-size:16px;margin:0 0 8px">Cadangan Data</h2><button class="btn" onclick="exportData()">Cadangkan Data (.sqlite)</button><label class="btn secondary" style="display:block;text-align:center;margin-top:10px"><input type="file" accept=".sqlite,.db" style="display:none" onchange="importData(event)">Pulihkan Data</label><button class="btn danger" style="margin-top:10px" onclick="resetDemo()">Reset Demo</button></div>${can('manage_master') ? `<div class="section-title"><h2>Akun Simulasi</h2></div>${users.map(u => `<div class="row"><div><strong>${esc(u.name)}</strong><div class="muted">${esc(u.email)}</div></div><span class="chip">${roleLabel(u.role)}</span></div>`).join('')}` : ''}`; document.getElementById('body').innerHTML = html + nav() + `</section>`; if (active === 'dashboard') drawChart(); if (active === 'transaksi' && can('create_transaction')) renderCategoryOptions() } function drawChart() { const el = document.getElementById('chart'); if (!el || !window.Chart) return; if (chart) chart.destroy(); const m = metrics(), days = ['M1', 'M2', 'M3', 'M4', 'M5']; chart = new Chart(el, { type: 'bar', data: { labels: days, datasets: [{ label: 'Pemasukan', data: [9500000, 8700000, 7200000, m.inc / 4, m.inc / 3], backgroundColor: '#16a34a' }, { label: 'Pengeluaran', data: [4200000, 1800000, 2500000, m.exp / 3, m.exp / 2], backgroundColor: '#f59e0b' }] }, options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { ticks: { callback: v => 'Rp' + (v / 1000000) + 'jt' } } } } }) } window.renderCategoryOptions = () => { const type = document.getElementById('type')?.value || 'income', sel = document.getElementById('category'); if (sel) sel.innerHTML = categories.filter(c => c.type === type).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('') }; window.go = t => { active = t; location.hash = '/' + t; render() }; window.login = () => { const u = users.find(x => x.email == $('#email').value && x.password == $('#password').value); if (!u) return toast('Email atau password salah.'); session = { ...u }; toast('Selamat datang, ' + u.name); render() }; window.addTransaction = () => exec('INSERT INTO transactions(business_id,type,category_id,amount,description,transaction_date,receipt_base64,created_by) VALUES (?,?,?,?,?,date(\'now\'),?,?)', [biz().id, $('#type').value, $('#category').value, Number($('#amount').value), $('#desc').value, receiptBase64, session.id]).then(() => toast('Transaksi tersimpan dan skor diperbarui.')); window.handleReceipt = e => { const f = e.target.files[0]; if (!f) return; const img = new Image(); img.onload = () => { const c = document.createElement('canvas'), max = 520, sc = Math.min(max / img.width, max / img.height, 1); c.width = img.width * sc; c.height = img.height * sc; c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); receiptBase64 = c.toDataURL('image/jpeg', .68); toast('Nota berhasil dikompresi ke Base64.') }; img.src = URL.createObjectURL(f) }; window.addNote = () => { const n = prompt('Tulis catatan untuk PT binaan:', 'Pisahkan uang usaha dan uang pribadi setiap hari.'); if (n) exec('INSERT INTO mentor_notes(business_id,mentor_id,note) VALUES (?,?,?)', [biz().id, session.id, n]).then(() => toast('Catatan pendamping disimpan.')) }; window.addCategory = () => { if (!can('manage_categories') && !can('manage_master')) return toast('Akses ditolak.'); exec('INSERT INTO categories(name,type) VALUES (?,?)', [$('#catName').value, $('#catType').value]).then(() => toast('Kategori transaksi ditambahkan.')) }; window.exportData = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([db.export()], { type: 'application/octet-stream' })); a.download = 'pt-coach-backup.sqlite'; a.click(); URL.revokeObjectURL(a.href) }; window.importData = async e => { const f = e.target.files[0]; if (!f) return; db = new SQL.Database(new Uint8Array(await f.arrayBuffer())); schema(); refresh(); await persist(); toast('Data berhasil dipulihkan.'); render() }; window.resetDemo = () => { indexedDB.deleteDatabase(DB_KEY); localStorage.removeItem(DB_KEY); location.reload() }; (async () => { try { SQL = await initSqlJs({ locateFile: f => 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/' + f }); db = new SQL.Database(await loadBytes() || undefined); schema(); seed(); refresh(); await persist() } catch (e) { console.error(e); toast('Mode darurat: SQLite WASM gagal dimuat. UI tetap aktif dengan data mock.'); users = [{ id: 1, name: 'Adafi aprianto abiyyu', email: 'admin@umkmcoach.id', password: 'admin123', role: 'admin' }, { id: 2, name: 'Igri maulana', email: 'umkm@umkmcoach.id', password: 'pt123', role: 'owner' }, { id: 3, name: 'Budi Santoso', email: 'pendamping@umkmcoach.id', password: 'damping123', role: 'mentor' }]; businesses = [{ id: 1, owner_id: 2, name: 'PT. Maju Jaya', monthly_target: 30000000, initial_score: 78, status: 'Usaha Berkembang', mentor_id: 3 }]; categories = [{ id: 1, name: 'Penjualan Harian', type: 'income' }, { id: 2, name: 'Pembelian Stok', type: 'expense' }]; transactions = []; scores = [{ business_id: 1, score: 78, status: 'Usaha Berkembang', recommendation: 'Arus kas cukup stabil. Tingkatkan penjualan agar target omzet tercapai.' }]; notes = [] } render() })();</script>
+    <script>const DB_KEY = 'administrasi_keuangan_sqlite_v1'; let SQL, db, session = null, active = location.hash.replace('#/', '') || 'dashboard', users = [], businesses = [], transactions = [],[...]</script>
+
+    <script>
+    // ---- tambahan utilitas ----
+    function toast(msg, timeout = 3000) {
+      const existing = document.getElementById('app-toast');
+      if (existing) existing.remove();
+      const t = document.createElement('div');
+      t.id = 'app-toast';
+      t.className = 'toast';
+      t.textContent = msg;
+      document.querySelector('.app-container').appendChild(t);
+      setTimeout(() => t.remove(), timeout);
+    }
+
+    function logout() {
+      try {
+        localStorage.removeItem('session');
+        localStorage.removeItem('currentUser');
+        session = null;
+      } catch(e) {
+        console.warn('logout cleanup error', e);
+      }
+      location.href = 'index.html';
+    }
+
+    function isAccountant() {
+      return session && (session.role === 'accountant' || session.role === 'admin');
+    }
+
+    function isOwner() {
+      return session && session.role === 'owner';
+    }
+
+    // render header kecil dengan nama user + logout
+    function renderHeaderSmall() {
+      const body = document.getElementById('body');
+      let hdr = document.getElementById('small-header');
+      if (!hdr) {
+        hdr = document.createElement('div');
+        hdr.id = 'small-header';
+        hdr.className = 'top-row';
+        hdr.style.padding = '10px 18px';
+        hdr.style.gap = '10px';
+        hdr.style.alignItems = 'center';
+        body.prepend(hdr);
+      }
+      hdr.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="avatar">${session ? (session.name||session.email||session.role[0]) : 'U'}</div>
+          <div style="display:flex;flex-direction:column;align-items:flex-start">
+            <div style="font-weight:900">${session ? (session.name || session.email) : 'Tamu'}</div>
+            <div style="font-size:12px;color:var(--muted)">${session ? session.role : ''}</div>
+          </div>
+        </div>
+        <div style="margin-left:auto">
+          <button class="btn secondary" onclick="logout()" title="Logout">Logout</button>
+        </div>
+      `;
+    }
+
+    // Render tombol tambah transaksi (hanya untuk akuntan/admin)
+    function renderAddTransactionControl(container) {
+      if (!isAccountant()) return;
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = 'Tambah Transaksi';
+      btn.onclick = () => showTransactionForm();
+      container.appendChild(btn);
+    }
+
+    function showTransactionForm(tx = null) {
+      const modal = document.createElement('div');
+      modal.style.position = 'fixed';
+      modal.style.left = '0';
+      modal.style.top = '0';
+      modal.style.right = '0';
+      modal.style.bottom = '0';
+      modal.style.display = 'grid';
+      modal.style.placeItems = 'center';
+      modal.style.background = 'rgba(0,0,0,0.4)';
+      modal.innerHTML = `
+        <div style="width:92%;max-width:420px;background:#fff;border-radius:16px;padding:18px">
+          <h3 style="margin:0 0 10px">Form Transaksi</h3>
+          <div class="field">
+            <label>Tipe</label>
+            <select id="tx-type">
+              <option value="income">Pemasukan</option>
+              <option value="expense">Pengeluaran</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Nominal</label>
+            <input id="tx-amount" type="number" min="0" placeholder="0" />
+          </div>
+          <div class="field">
+            <label>Kategori</label>
+            <input id="tx-category" type="text" placeholder="Contoh: Penjualan, Beli Bahan" />
+          </div>
+          <div class="field">
+            <label>Deskripsi</label>
+            <input id="tx-desc" type="text" placeholder="Keterangan (opsional)" />
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+            <button class="btn secondary" id="tx-cancel">Batal</button>
+            <button class="btn" id="tx-save">Simpan</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      document.getElementById('tx-cancel').onclick = () => modal.remove();
+      document.getElementById('tx-save').onclick = () => {
+        const type = document.getElementById('tx-type').value;
+        const amount = Number(document.getElementById('tx-amount').value || 0);
+        const category = document.getElementById('tx-category').value.trim();
+        const description = document.getElementById('tx-desc').value.trim();
+        if (!amount || amount <= 0) { toast('Masukkan nominal yang valid'); return; }
+        saveTransaction({
+          type, amount, category, description,
+          transaction_date: new Date().toISOString(),
+          created_by: session ? session.email || session.id : 'unknown'
+        });
+        modal.remove();
+      };
+    }
+
+    function saveTransaction(tx) {
+      if (isOwner()) {
+        toast('Aksi ditolak — Pemilik PT hanya dapat memantau.');
+        return;
+      }
+      tx.id = 't_' + Date.now();
+      transactions = transactions || [];
+      transactions.push(tx);
+      try {
+        localStorage.setItem('transactions', JSON.stringify(transactions));
+      } catch (e) {
+        console.warn('simpan transaksi gagal', e);
+      }
+      toast('Transaksi tersimpan');
+      if (typeof renderTransactions === 'function') renderTransactions();
+    }
+
+    // Jika aplikasi melakukan inisialisasi UI setelah load, coba render header
+    document.addEventListener('DOMContentLoaded', () => {
+      // Muat session dari localStorage jika ada
+      try {
+        const s = localStorage.getItem('session') || localStorage.getItem('currentUser') || null;
+        if (s) session = JSON.parse(s);
+      } catch(e) { session = session; }
+      // render header jika body sudah tersedia
+      if (document.getElementById('body')) renderHeaderSmall();
+    });
+    </script>
 </body>
 
 </html>
